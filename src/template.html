@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js" integrity="sha256-u7e5khyithlIdTpu22PHhENmPcRdFiHRjhAuHcs05RI=" crossorigin="anonymous"></script>
+  <style>
+    body { font: 11pt Calibri,"Helvetica Neue",Arial,sans-serif; }
+    label { margin-right: 2px; }
+    .component-list { padding: 0; margin: 0; }
+    .header    { display: inline-block; }
+    .component { padding: 0 2px; margin: 0;  display: inline-block; cursor: pointer; }
+    .active-component { background-color: #ccc; }
+  </style>
+<script>
+let availableMetrics = {{ available_metrics }};
+let hadVMAF = false;
+
+const embed_opt = {"mode": "vega-lite"};
+const mean_charts = {};
+const worst_charts = {};
+const frame_charts = {};
+
+const qps = {{ qps }};
+const bitrates = {{ bitrates }};
+let selectedOption = null;
+
+function fillChartsData() {
+{% for chart in mean_charts -%}
+mean_charts.{{chart.metric}} = {{chart.data}};
+{% endfor %}
+
+{% for chart in worst_charts -%}
+worst_charts.{{chart.metric}} = {{chart.data}};
+{% endfor %}
+
+{% for chart in frame_charts -%}
+frame_charts.{{chart.metric}} = {{chart.data}};
+{% endfor %}
+}
+
+function createDivs() {
+    for(const metric of availableMetrics) {
+        $(`<div id="mean_${metric}"></div>`).appendTo('div.mean');
+        $(`<div id="worst_${metric}"></div>`).appendTo('div.worst');
+        $(`<div id="frame_${metric}"></div>`).appendTo('div.frame');
+    }
+}
+
+function attachComponentListeners() {
+    $('.component').click(function() {
+        const $el = $(this);
+        if ($el.hasClass('active-component')) return;
+        $('.component-list > .component').removeClass('active-component');
+        $el.addClass('active-component');
+        const component = $el.data('component');
+
+        for(const metric of availableMetrics) {
+            vegaEmbed(`#mean_${metric}`, mean_charts[`${metric}_${component}`], embed_opt);
+            vegaEmbed(`#worst_${metric}`, worst_charts[`${metric}_${component}`], embed_opt);
+            vegaEmbed(`#frame_${metric}`, frame_charts[`${metric}_${component}_${selectedOption}`], embed_opt);
+        }
+    });
+}
+
+function changeHandler() {
+    const selectedValue = $( "#br_and_qps option:selected" ).val();
+    for(const metric of availableMetrics) {
+        if (hadVMAF) {
+            vegaEmbed('#frame_VMAF', frame_charts[`VMAF_${selectedValue}`], embed_opt);
+        }
+        const component = $('.component.active-component').data('component')
+        vegaEmbed(`#frame_${metric}`, frame_charts[`${metric}_${component}_${selectedValue}`], embed_opt);
+    }
+}
+
+$(function() {
+    createDivs();
+    attachComponentListeners();
+    fillChartsData();
+    selectedOption = qps.length ? qps[0] : bitrates[0];
+    for (const metric of availableMetrics) {
+        if (metric === 'VMAF') {
+            vegaEmbed('#mean_VMAF', mean_charts.VMAF, embed_opt);
+            if (!jQuery.isEmptyObject(frame_charts)) {
+                vegaEmbed('#worst_VMAF', worst_charts.VMAF, embed_opt);
+                vegaEmbed('#frame_VMAF', frame_charts[`VMAF_${selectedOption}`], embed_opt);
+            }
+        } else {
+            vegaEmbed(`#mean_${metric}`, mean_charts[`${metric}_Y`], embed_opt);
+            if (!jQuery.isEmptyObject(frame_charts)) {
+                vegaEmbed(`#worst_${metric}`, worst_charts[`${metric}_Y`], embed_opt);
+                vegaEmbed(`#frame_${metric}`, frame_charts[`${metric}_Y_${selectedOption}`], embed_opt);
+            }
+
+        }
+    }
+    if (!jQuery.isEmptyObject(frame_charts)) {
+        $("<label for='br_and_qps'>Bitrates and QPs</label>").appendTo("div#controls");
+
+        const select = $("<select name='br_and_qps' id='br_and_qps'></select>")
+        for (const qp of qps) {
+            if (qp === selectedOption) {
+                $(`<option selected value="${qp}">QP: ${qp}</option>`).appendTo(select);
+            } else {
+                $(`<option value="${qp}">QP: ${qp}</option>`).appendTo(select);
+            }
+        }
+        for (const br of bitrates) {
+            if (br === selectedOption) {
+                $(`<option selected value="${br}">${br}</option>`).appendTo(select);
+            } else {
+                $(`<option value="${br}">${br}</option>`).appendTo(select);
+            }
+        }
+        select.appendTo("div#controls");
+        select.change(changeHandler);
+    }
+
+    hadVMAF = availableMetrics.includes('VMAF');
+    availableMetrics = availableMetrics.filter(metric => metric !== 'VMAF');
+})
+</script>
+</head>
+<body>
+<ul class='component-list'>
+    <li class='header'>Components:</li>
+    <li class='component active-component' data-component='Y'>Y</li>
+    <li class='component' data-component='U'>U</li>
+    <li class='component' data-component='V'>V</li>
+    <li class='component' data-component='YUV'>YUV</li>
+</ul>
+<div class="mean"></div>
+<div class="worst"></div>
+<div id="controls"></div>
+<div class="frame"></div>
+</body>
+</html>
