@@ -99,7 +99,7 @@ class DataBank:
             y = section[metric]['Y']
             u = section[metric]['U']
             v = section[metric]['V']
-            yuv = (y * 6 + u + v) / 8
+            yuv = (4*y + u + v) / 6
             record.update({
                 f'{metric}_Y': y,
                 f'{metric}_U': u,
