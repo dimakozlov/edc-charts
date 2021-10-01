@@ -380,9 +380,10 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
 
     return bitrates, qps, charts
 
-def generate_charts(bank: DataBank):
+def generate_charts(bank: DataBank, charts_folder):
     alt.data_transformers.disable_max_rows()
-    charts_folder = current_folder / 'charts'
+    if not charts_folder:
+        charts_folder = current_folder / 'charts'
     charts_folder.mkdir(exist_ok=True)
 
     # loader = jinja2.FileSystemLoader(searchpath=current_folder)

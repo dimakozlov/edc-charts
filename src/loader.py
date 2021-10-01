@@ -17,10 +17,11 @@ else:
 
 
 class Tool:
-    def __init__(self, tool: Dict[str, str], qp):
+    def __init__(self, tool: Dict[str, str], artifacts_path, qp):
         self.label = tool['label']
         self.command_line = tool['command-line-cqp'] if qp else tool['command-line']
         self.qp = qp
+        self.artifacts_path = artifacts_path if artifacts_path else current_folder
 
     @cached_property
     def md5(self):
@@ -34,7 +35,7 @@ class Tool:
 
     @cached_property
     def folder(self):
-        cache = current_folder / '.cache'
+        cache = self.artifacts_path / '.cache'
         return cache / f'{self.name}.{self.md5}'
 
     def __str__(self):
@@ -162,15 +163,15 @@ def load_global_settings(bank:DataBank, cfg:Dict[str,Any]):
         bank.per_frame_metrics.update(metric.upper() for metric in cfg['per-frame-metrics'])
 
 
-def load_tools(bank: DataBank, tool_section: List[Dict[str,str]]):
+def load_tools(bank: DataBank, tool_section: List[Dict[str,str]], artifacts_path):
     for i, tool in enumerate(tool_section, 1):
         label = tool.get('label')
         if not label:
             sys.exit(f'There is no label in the {num2words(i, ordinal=True)} tool section')
         if 'command-line' in tool:
-            bank.add_tool(Tool(tool, qp=False))
+            bank.add_tool(Tool(tool, artifacts_path, qp=False))
         if 'command-line-cqp' in tool:
-            bank.add_tool(Tool(tool, qp=True))
+            bank.add_tool(Tool(tool, artifacts_path, qp=True))
 
 
 def load_streams(bank: DataBank, stream_section: List[Dict[str,str]]):
@@ -178,10 +179,10 @@ def load_streams(bank: DataBank, stream_section: List[Dict[str,str]]):
         bank.add_stream(Stream(stream))
 
 
-def load_data(cfg):
+def load_data(cfg, artifacts_path):
     bank = DataBank()
     load_global_settings(bank, cfg)
-    load_tools(bank, cfg.get('tools', []))
+    load_tools(bank, cfg.get('tools', []), artifacts_path)
     load_streams(bank, cfg.get('streams', []))
 
     for tool in bank.tools:
