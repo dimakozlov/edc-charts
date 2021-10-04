@@ -15,8 +15,12 @@ else:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Zero-config chart generator")
-    parser.add_argument('config', nargs='?', default='edc.yaml',
-                        help='configuration file in yaml format')
+    parser.add_argument('config', nargs='?', default='edc.yaml', help='configuration file in yaml format.'
+                                                            ' (default: %(default)s)')
+    parser.add_argument('--artifacts', required=False, help='Path to edc output artifacts directory.'
+                                                            ' (default: the same directory as config\'s one)')
+    parser.add_argument('--charts', required=False, help='Path to output charts directory.'
+                                                            ' (default: the charts directory)')
 
     args = parser.parse_args()
 
@@ -30,6 +34,18 @@ if __name__ == '__main__':
     with config.open(encoding='utf8') as f:
         cfg = yaml.safe_load(f)
 
-    bank = load_data(cfg)
+    # where .cache and other artifacts are located
+    artifacts_path = None
+    if args.artifacts:
+        artifacts_path = Path(args.artifacts)
+        if not artifacts_path.exists():
+            exit(f'Artifacts path not found: {artifacts_path}')
 
-    generate_charts(bank)
+    charts_path = None
+    if args.charts:
+        charts_path = Path(args.charts)
+
+
+    bank = load_data(cfg, artifacts_path)
+
+    generate_charts(bank, charts_path)
