@@ -68,6 +68,7 @@ class DataBank:
         self.common_qp = []
         self.extra_metrics = set(['PSNR'])
         self.per_frame_metrics = set()
+        self.has_file_sizes = False
 
         self.df = pd.DataFrame(columns=[
             'tool', 'stream', 'br_or_qp',
@@ -84,6 +85,7 @@ class DataBank:
             'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
             'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
             'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV',
+            'frame_size'
         ])
 
     def br_or_qp(self, tool: Tool):
@@ -142,6 +144,9 @@ class DataBank:
             }
             if 'VMAF' in frame:
                 record['VMAF'] = frame['VMAF']
+            if 'frame_size' in frame:
+                record['frame_size'] = frame['frame_size']
+                self.has_file_sizes = True
 
             self._update_record(record, 'PSNR', frame)
             self._update_record(record, 'SSIM', frame)

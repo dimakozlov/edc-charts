@@ -1,4 +1,5 @@
 import sys
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple, List, Any
@@ -6,8 +7,6 @@ from typing import Dict, Tuple, List, Any
 import jinja2
 import altair as alt
 from loader import DataBank, Stream
-
-import pandas as pd
 
 
 if getattr(sys, 'frozen', False):
@@ -46,6 +45,7 @@ const embed_opt = {"mode": "vega-lite"};
 const mean_charts = {};
 const worst_charts = {};
 const frame_charts = {};
+const frame_size_charts = {};
 
 const qps = {{ qps }};
 const bitrates = {{ bitrates }};
@@ -62,6 +62,10 @@ worst_charts.{{chart.metric}} = {{chart.data}};
 
 {% for chart in frame_charts -%}
 frame_charts.{{chart.metric}} = {{chart.data}};
+{% endfor %}
+
+{% for chart in frame_sizes_charts -%}
+frame_size_charts.{{chart.metric}} = {{chart.data}};
 {% endfor %}
 }
 
@@ -97,6 +101,10 @@ function changeHandler() {
         }
         const component = $('.component.active-component').data('component')
         vegaEmbed(`#frame_${metric}`, frame_charts[`${metric}_${component}_${selectedValue}`], embed_opt);
+        if (!jQuery.isEmptyObject(frame_size_charts)) {
+            vegaEmbed('#frame_size', frame_size_charts[`frame_size_${selectedValue}`], embed_opt);
+        }
+
     }
 }
 
@@ -105,6 +113,9 @@ $(function() {
     attachComponentListeners();
     fillChartsData();
     selectedOption = qps.length ? qps[0] : bitrates[0];
+    if (!jQuery.isEmptyObject(frame_size_charts)) {
+        vegaEmbed('#frame_size', frame_size_charts[`frame_size_${selectedOption}`], embed_opt);
+    }
     for (const metric of availableMetrics) {
         if (metric === 'VMAF') {
             vegaEmbed('#mean_VMAF', mean_charts.VMAF, embed_opt);
@@ -118,7 +129,6 @@ $(function() {
                 vegaEmbed(`#worst_${metric}`, worst_charts[`${metric}_Y`], embed_opt);
                 vegaEmbed(`#frame_${metric}`, frame_charts[`${metric}_Y_${selectedOption}`], embed_opt);
             }
-
         }
     }
     if (!jQuery.isEmptyObject(frame_charts)) {
@@ -160,9 +170,16 @@ $(function() {
 <div class="worst"></div>
 <div id="controls"></div>
 <div class="frame"></div>
+<div id="frame_size"></div>
 </body>
 </html>
 '''
+
+
+def compact_json(source: str) -> str:
+    jsn = json.loads(source)
+    return json.dumps(jsn, separators=(',', ':'))
+
 
 def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
     charts = []
@@ -180,7 +197,7 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                 metric_df = df.drop(columns=columns)
                 tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
                 selection = alt.selection_multi(fields=['tool'], bind='legend')
-                charts.append(Chart(f'{metric}_{component}', alt.Chart(metric_df).mark_line(point=True, interpolate='monotone').encode(
+                chart = Chart(f'{metric}_{component}', alt.Chart(metric_df).mark_line(point=True, interpolate='monotone').encode(
                     alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
                     alt.Y(f'{metric}_{component}', scale=alt.Scale(zero=False), title=f'Mean {metric} {component}'),
                     color='tool',
@@ -193,7 +210,10 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                     orient='top'
                 ).interactive().add_selection(
                     selection
-                ).to_json()))
+                ).to_json())
+
+                chart.data = compact_json(chart.data)
+                charts.append(chart)
 
     if 'VMAF' in bank.extra_metrics:
         vmaf_df = df.drop(columns=[
@@ -203,7 +223,7 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
             'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
         ])
         selection = alt.selection_multi(fields=['tool'], bind='legend')
-        charts.append(Chart('VMAF', alt.Chart(vmaf_df).mark_line(point=True, interpolate='monotone').encode(
+        chart = Chart('VMAF', alt.Chart(vmaf_df).mark_line(point=True, interpolate='monotone').encode(
             alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
             alt.Y('VMAF', scale=alt.Scale(zero=False), title='Mean VMAF'),
             color='tool',
@@ -216,7 +236,10 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
             orient='top'
         ).interactive().add_selection(
             selection
-        ).to_json()))
+        ).to_json())
+
+        chart.data = compact_json(chart.data)
+        charts.append(chart)
 
     return charts
 
@@ -249,7 +272,7 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
 
                 tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
                 selection = alt.selection_multi(fields=['tool'], bind='legend')
-                charts.append(Chart(f'{metric}_{component}', alt.Chart(worst_metric).mark_line(point=True, interpolate='monotone').encode(
+                chart = Chart(f'{metric}_{component}', alt.Chart(worst_metric).mark_line(point=True, interpolate='monotone').encode(
                     alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
                     alt.Y(f'{metric}_{component}', scale=alt.Scale(zero=False), title=f'Worst {metric} {component}'),
                     color='tool',
@@ -262,7 +285,11 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                     orient='top'
                 ).interactive().add_selection(
                     selection
-                ).to_json()))
+                ).to_json())
+
+                chart.data = compact_json(chart.data)
+                charts.append(chart)
+
 
     if 'VMAF' in bank.extra_metrics:
         vmaf_details_df = df.drop(columns=[
@@ -275,7 +302,7 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
         worst_wmaf = vmaf_details_df.groupby(['tool', 'br_or_qp']).min().reset_index()
         worst_wmaf = stream_df.join(worst_wmaf.set_index(['tool', 'br_or_qp'])).reset_index()
         selection = alt.selection_multi(fields=['tool'], bind='legend')
-        charts.append(Chart('VMAF', alt.Chart(worst_wmaf).mark_line(point=True, interpolate='monotone').encode(
+        chart = Chart('VMAF', alt.Chart(worst_wmaf).mark_line(point=True, interpolate='monotone').encode(
             alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
             alt.Y('VMAF', scale=alt.Scale(zero=False), title='Worst VMAF'),
             color='tool',
@@ -288,10 +315,55 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
             orient='top'
         ).interactive().add_selection(
             selection
-        ).to_json()))
+        ).to_json())
+
+        chart.data = compact_json(chart.data)
+        charts.append(chart)
 
     return charts
 
+def generate_frame_size_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
+    charts = []
+    for tool in bank.tools:
+        br_or_qp = stream.br_or_qp(tool) or bank.br_or_qp(tool)
+
+        for qp in br_or_qp:
+            df = bank.details_df.query(f'stream == "{stream.name}" and br_or_qp == {qp}')
+            columns = set(['stream', 'VMAF',
+                'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
+                'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
+                'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
+            ])
+            metric_details_df = df.drop(columns=columns)
+            selection = alt.selection_multi(fields=['tool'], bind='legend')
+            chart = Chart(
+                f'frame_size_{qp}',
+                alt.Chart(metric_details_df).mark_line(
+                    point=True, interpolate='monotone'
+                ).encode(
+                    alt.X('frame'),
+                    alt.Y(
+                        'frame_size',
+                        scale=alt.Scale(zero=False),
+                        title='frame size'
+                    ),
+                    color='tool',
+                    tooltip=[
+                        alt.Tooltip('frame:Q'),
+                        alt.Tooltip('frame_size:Q'),
+                        alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
+                    ],
+                    opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
+            ).properties(
+                width=1450
+            ).interactive().add_selection(
+                selection
+            ).to_json())
+
+            chart.data = compact_json(chart.data)
+            charts.append(chart)
+
+    return charts
 
 def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],List[int],Dict[str,Any]]:
     charts = []
@@ -310,49 +382,51 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
             for metric in ['PSNR', 'SSIM', 'MSSIM']:
                 if metric in bank.extra_metrics:
                     for component in ['Y', 'U', 'V', 'YUV']:
-                            columns = set(['stream', 'VMAF',
-                                'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
-                                'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
-                                'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
-                            ])
-                            columns.discard(f'{metric}_{component}')
-                            metric_details_df = df.drop(columns=columns)
-                            selection = alt.selection_multi(fields=['tool'], bind='legend')
-                            tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
-                            chart = Chart(
-                                f'{metric}_{component}_{qp}',
-                                alt.Chart(metric_details_df).mark_line(
-                                    point=True, interpolate='monotone'
-                                ).encode(
-                                    alt.X('frame'),
-                                    alt.Y(
-                                        f'{metric}_{component}',
-                                        scale=alt.Scale(zero=False),
+                        columns = set(['stream', 'VMAF', 'frame_size',
+                            'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
+                            'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
+                            'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
+                        ])
+                        columns.discard(f'{metric}_{component}')
+                        metric_details_df = df.drop(columns=columns)
+                        selection = alt.selection_multi(fields=['tool'], bind='legend')
+                        tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
+                        chart = Chart(
+                            f'{metric}_{component}_{qp}',
+                            alt.Chart(metric_details_df).mark_line(
+                                point=True, interpolate='monotone'
+                            ).encode(
+                                alt.X('frame'),
+                                alt.Y(
+                                    f'{metric}_{component}',
+                                    scale=alt.Scale(zero=False),
+                                    title=f'{metric} {component}'
+                                ),
+                                color='tool',
+                                tooltip=[
+                                    alt.Tooltip('frame:Q'),
+                                    alt.Tooltip(
+                                        f'{metric}_{component}:Q',
+                                        format=tooltip_format,
                                         title=f'{metric} {component}'
                                     ),
-                                    color='tool',
-                                    tooltip=[
-                                        alt.Tooltip('frame:Q'),
-                                        alt.Tooltip(
-                                            f'{metric}_{component}:Q',
-                                            format=tooltip_format,
-                                            title=f'{metric} {component}'
-                                        ),
-                                        alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
-                                    ],
-                                    opacity=alt.condition(selection, alt.value(1), alt.value(0.1)
-                                )
-                            ).properties(
-                                width=1450
-                            ).interactive().add_selection(
-                                selection
-                            ).to_json())
+                                    alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
+                                ],
+                                opacity=alt.condition(selection, alt.value(1), alt.value(0.1)
+                            )
+                        ).properties(
+                            width=1450
+                        ).interactive().add_selection(
+                            selection
+                        ).to_json())
 
-                            charts.append(chart)
+                        jsn = json.loads(chart.data)
+                        chart.data = json.dumps(jsn, separators=(',', ':'))
+                        charts.append(chart)
 
             if 'VMAF' in bank.extra_metrics:
                 vmaf_details_df = df.drop(columns=[
-                    'stream',
+                    'stream', 'frame_size',
                     'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
                     'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
                     'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
@@ -376,6 +450,7 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
                     selection
                 ).to_json())
 
+                chart.data = compact_json(chart.data)
                 charts.append(chart)
 
     return bitrates, qps, charts
@@ -404,10 +479,15 @@ def generate_charts(bank: DataBank, charts_folder):
         if not bank.details_df.empty:
             bitrates, qps, frame_charts = generate_frame_charts(bank, stream)
 
+        frame_sizes_charts = {}
+        if bank.has_file_sizes:
+            frame_sizes_charts = generate_frame_size_charts(bank, stream)
+
         html = t.render(
             mean_charts=mean_charts,
             worst_charts=worst_charts,
             frame_charts=frame_charts,
+            frame_sizes_charts=frame_sizes_charts,
             bitrates=bitrates,
             qps=qps,
             available_metrics=list(bank.extra_metrics)
