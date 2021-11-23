@@ -4,7 +4,7 @@ block_cipher = None
 
 datas = [
     (
-        "C:/Users/dkozlov/.virtualenvs/edc-charts-3xEQx6NU/Lib/site-packages/altair/vegalite/v4/schema/vega-lite-schema.json",
+        "C:/Users/dkozlov/.virtualenvs/edc-charts-w_upGIEW/Lib/site-packages/altair/vegalite/v4/schema/vega-lite-schema.json",
         "./altair/vegalite/v4/schema/"
     )
 ]

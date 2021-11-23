@@ -194,15 +194,16 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                     'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
                 ])
                 columns.discard(f'{metric}_{component}')
-                metric_df = df.drop(columns=columns)
+                md = df.rename(columns={'br_or_qp': 'q', 'real_bitrate': 'b'})
+                metric_df = md.drop(columns=columns)
                 tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
                 selection = alt.selection_multi(fields=['tool'], bind='legend')
                 chart = Chart(f'{metric}_{component}', alt.Chart(metric_df).mark_line(point=True, interpolate='monotone').encode(
-                    alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
+                    alt.X('b', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
                     alt.Y(f'{metric}_{component}', scale=alt.Scale(zero=False), title=f'Mean {metric} {component}'),
                     color='tool',
                     tooltip=[
-                        alt.Tooltip('real_bitrate:Q', format=',.1f', title='Bitrate'),
+                        alt.Tooltip('b:Q', format=',.1f', title='Bitrate'),
                         alt.Tooltip(f'{metric}_{component}:Q', format=tooltip_format, title=f'{metric} {component}')
                     ],
                     opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
@@ -216,7 +217,8 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                 charts.append(chart)
 
     if 'VMAF' in bank.extra_metrics:
-        vmaf_df = df.drop(columns=[
+        md = df.rename(columns={'br_or_qp': 'q', 'real_bitrate': 'b'})
+        vmaf_df = md.drop(columns=[
             'stream',
             'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
             'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
@@ -224,11 +226,11 @@ def generate_mean_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
         ])
         selection = alt.selection_multi(fields=['tool'], bind='legend')
         chart = Chart('VMAF', alt.Chart(vmaf_df).mark_line(point=True, interpolate='monotone').encode(
-            alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
+            alt.X('b', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
             alt.Y('VMAF', scale=alt.Scale(zero=False), title='Mean VMAF'),
             color='tool',
             tooltip=[
-                alt.Tooltip('real_bitrate:Q', format=',.1f', title='Bitrate'),
+                alt.Tooltip('b:Q', format=',.1f', title='Bitrate'),
                 alt.Tooltip('VMAF:Q', format='.1f')
             ],
             opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
@@ -259,10 +261,11 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
     for metric in ['PSNR', 'SSIM', 'MSSIM']:
         if metric in bank.extra_metrics:
            for component in ['Y', 'U', 'V', 'YUV']:
-                columns = set(['stream', 'VMAF',
+                columns = set(['stream', 'VMAF', 'frame_size',
                     'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
                     'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
-                    'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
+                    'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV',
+                    'frame'
                 ])
                 columns.discard(f'{metric}_{component}')
                 metric_details_df = df.drop(columns=columns)
@@ -270,14 +273,16 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                 worst_metric = metric_details_df.groupby(['tool', 'br_or_qp']).min().reset_index()
                 worst_metric = stream_df.join(worst_metric.set_index(['tool', 'br_or_qp'])).reset_index()
 
+                wm = worst_metric.rename(columns={'br_or_qp': 'q', 'real_bitrate': 'b'})
+
                 tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
                 selection = alt.selection_multi(fields=['tool'], bind='legend')
-                chart = Chart(f'{metric}_{component}', alt.Chart(worst_metric).mark_line(point=True, interpolate='monotone').encode(
-                    alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
+                chart = Chart(f'{metric}_{component}', alt.Chart(wm).mark_line(point=True, interpolate='monotone').encode(
+                    alt.X('b', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
                     alt.Y(f'{metric}_{component}', scale=alt.Scale(zero=False), title=f'Worst {metric} {component}'),
                     color='tool',
                     tooltip=[
-                        alt.Tooltip('real_bitrate:Q', format=',.1f', title='Bitrate'),
+                        alt.Tooltip('b:Q', format=',.1f', title='Bitrate'),
                         alt.Tooltip(f'{metric}_{component}:Q', format=tooltip_format, title=f'{metric} {component}')
                     ],
                     opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
@@ -293,21 +298,25 @@ def generate_worst_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
 
     if 'VMAF' in bank.extra_metrics:
         vmaf_details_df = df.drop(columns=[
-            'stream', 'frame',
+            'stream', 'frame', 'frame_size',
             'PSNR_Y', 'PSNR_U', 'PSNR_V', 'PSNR_YUV',
             'SSIM_Y', 'SSIM_U', 'SSIM_V', 'SSIM_YUV',
-            'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
+            'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV',
+            'frame'
         ])
 
-        worst_wmaf = vmaf_details_df.groupby(['tool', 'br_or_qp']).min().reset_index()
-        worst_wmaf = stream_df.join(worst_wmaf.set_index(['tool', 'br_or_qp'])).reset_index()
+        worst_vmaf = vmaf_details_df.groupby(['tool', 'br_or_qp']).min().reset_index()
+        worst_vmaf = stream_df.join(worst_vmaf.set_index(['tool', 'br_or_qp'])).reset_index()
+
+        wv = worst_vmaf.rename(columns={'br_or_qp': 'q', 'real_bitrate': 'b'})
+
         selection = alt.selection_multi(fields=['tool'], bind='legend')
-        chart = Chart('VMAF', alt.Chart(worst_wmaf).mark_line(point=True, interpolate='monotone').encode(
-            alt.X('real_bitrate', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
+        chart = Chart('VMAF', alt.Chart(wv).mark_line(point=True, interpolate='monotone').encode(
+            alt.X('b', scale=alt.Scale(zero=False), title='Bitrate (Kb/s)'),
             alt.Y('VMAF', scale=alt.Scale(zero=False), title='Worst VMAF'),
             color='tool',
             tooltip=[
-                alt.Tooltip('real_bitrate:Q', format=',.1f', title='Bitrate'),
+                alt.Tooltip('b:Q', format=',.1f', title='Bitrate'),
                 alt.Tooltip('VMAF:Q', format='.1f')
             ],
             opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
@@ -335,23 +344,20 @@ def generate_frame_size_charts(bank: DataBank, stream: Stream) -> Dict[str,Any]:
                 'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
             ])
             metric_details_df = df.drop(columns=columns)
+            md = metric_details_df.rename(columns={'br_or_qp': 'q', 'frame_size': 's', 'frame': 'f'})
             selection = alt.selection_multi(fields=['tool'], bind='legend')
             chart = Chart(
                 f'frame_size_{qp}',
-                alt.Chart(metric_details_df).mark_line(
+                alt.Chart(md).mark_line(
                     point=True, interpolate='monotone'
                 ).encode(
-                    alt.X('frame'),
-                    alt.Y(
-                        'frame_size',
-                        scale=alt.Scale(zero=False),
-                        title='frame size'
-                    ),
+                    alt.X('f'),
+                    alt.Y('s', scale=alt.Scale(zero=False), title='Frame Size'),
                     color='tool',
                     tooltip=[
-                        alt.Tooltip('frame:Q'),
-                        alt.Tooltip('frame_size:Q'),
-                        alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
+                        alt.Tooltip('f:Q', title='Frame'),
+                        alt.Tooltip('s:Q', title='Frame Size'),
+                        alt.Tooltip('q:Q', title='Bitrate or QP'),
                     ],
                     opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
             ).properties(
@@ -389,14 +395,17 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
                         ])
                         columns.discard(f'{metric}_{component}')
                         metric_details_df = df.drop(columns=columns)
+
+                        md = metric_details_df.rename(columns={'br_or_qp': 'q', 'frame': 'f'})
+
                         selection = alt.selection_multi(fields=['tool'], bind='legend')
                         tooltip_format = '.2f' if metric == 'PSNR' else '.4f'
                         chart = Chart(
                             f'{metric}_{component}_{qp}',
-                            alt.Chart(metric_details_df).mark_line(
+                            alt.Chart(md).mark_line(
                                 point=True, interpolate='monotone'
                             ).encode(
-                                alt.X('frame'),
+                                alt.X('f'),
                                 alt.Y(
                                     f'{metric}_{component}',
                                     scale=alt.Scale(zero=False),
@@ -404,13 +413,13 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
                                 ),
                                 color='tool',
                                 tooltip=[
-                                    alt.Tooltip('frame:Q'),
+                                    alt.Tooltip('f:Q', title='Frame'),
                                     alt.Tooltip(
                                         f'{metric}_{component}:Q',
                                         format=tooltip_format,
                                         title=f'{metric} {component}'
                                     ),
-                                    alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
+                                    alt.Tooltip('q:Q', title='Bitrate or QP'),
                                 ],
                                 opacity=alt.condition(selection, alt.value(1), alt.value(0.1)
                             )
@@ -420,8 +429,7 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
                             selection
                         ).to_json())
 
-                        jsn = json.loads(chart.data)
-                        chart.data = json.dumps(jsn, separators=(',', ':'))
+                        chart.data = compact_json(chart.data)
                         charts.append(chart)
 
             if 'VMAF' in bank.extra_metrics:
@@ -432,16 +440,17 @@ def generate_frame_charts(bank: DataBank, stream: Stream) -> Tuple[List[int],Lis
                     'MSSIM_Y', 'MSSIM_U', 'MSSIM_V', 'MSSIM_YUV'
                 ])
 
+                vd = vmaf_details_df.rename(columns={'br_or_qp': 'q', 'frame': 'f'})
                 selection = alt.selection_multi(fields=['tool'], bind='legend')
 
-                chart = Chart(f'VMAF_{qp}', alt.Chart(vmaf_details_df).mark_line(point=True, interpolate='monotone').encode(
-                    alt.X('frame'),
+                chart = Chart(f'VMAF_{qp}', alt.Chart(vd).mark_line(point=True, interpolate='monotone').encode(
+                    alt.X('f'),
                     alt.Y('VMAF', scale=alt.Scale(zero=False)),
                     color='tool',
                     tooltip=[
-                        alt.Tooltip('frame:Q'),
+                        alt.Tooltip('f:Q', title='Frame'),
                         alt.Tooltip('VMAF:Q', format='.1f'),
-                        alt.Tooltip('br_or_qp:Q', title='Bitrate or QP'),
+                        alt.Tooltip('q:Q', title='Bitrate or QP'),
                     ],
                     opacity=alt.condition(selection, alt.value(1), alt.value(0.1))
                 ).properties(
